@@ -16,7 +16,7 @@ import torch
 
 from torch.autograd.profiler import record_function
 from torchvision import models
-
+from muon import Muon  # util PyTorch actually releases Muon
 
 def trace_handler(prof: torch.profiler.profile) -> None:
     # Construct the memory timeline file.
@@ -41,6 +41,8 @@ def run_resnet50(
         optimizer = torch.optim.SGD(model.parameters(), momentum=0.9)
     elif optimizer_type == "adam":
         optimizer = torch.optim.Adam(model.parameters())
+    elif optimizer_type == "muon":
+        optimizer = Muon(model.parameters())
     else:
         raise ValueError(f"Unknown optimizer: {optimizer_type}")
 
@@ -170,6 +172,20 @@ def profile_memory_modal_gpu_adam_gradacc() -> Tuple[bytes, bytes]:
     return html_data, json_data
 
 
+@app.function(
+    gpu="A10G",
+    cpu=2,
+    timeout=3600,
+)
+def profile_memory_modal_gpu_muon() -> Tuple[bytes, bytes]:
+    """Run memory profiling on Modal with GPU using Adam optimizer."""
+    assert torch.cuda.is_available()
+    device: str = "cuda"
+    # Run profiling with Adam optimizer
+    html_data, json_data = run_resnet50(optimizer_type="muon", device=device)
+    return html_data, json_data
+
+
 def process(subdirectory: str, func: Callable[[], Tuple[bytes, bytes]]) -> None:
     os.makedirs(f"profiling/{subdirectory}", exist_ok=True)
 
@@ -197,11 +213,12 @@ def main() -> None:
     process("local_cpu_sgd", profile_memory_local_sgd)
 
     directory_and_functions: list[tuple[str, Callable[[], Tuple[bytes, bytes]]]] = [
-        ("modal_cpu_sgd", profile_memory_modal_cpu_sgd.remote),
-        ("modal_gpu_sgd", profile_memory_modal_gpu_sgd.remote),
-        ("modal_gpu_sgd_momentum", profile_memory_modal_gpu_sgd_momentum.remote),
-        ("modal_gpu_adam", profile_memory_modal_gpu_adam.remote),
-        ("modal_gpu_adam_gradacc", profile_memory_modal_gpu_adam_gradacc.remote),
+        # ("modal_cpu_sgd", profile_memory_modal_cpu_sgd.remote),
+        # ("modal_gpu_sgd", profile_memory_modal_gpu_sgd.remote),
+        # ("modal_gpu_sgd_momentum", profile_memory_modal_gpu_sgd_momentum.remote),
+        # ("modal_gpu_adam", profile_memory_modal_gpu_adam.remote),
+        # ("modal_gpu_adam_gradacc", profile_memory_modal_gpu_adam_gradacc.remote),
+        ("modal_gpu_muon", profile_memory_modal_gpu_muon.remote),
     ]
 
     # Run all profiling tasks in parallel
